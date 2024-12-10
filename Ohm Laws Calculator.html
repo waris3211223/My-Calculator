@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloud-Integrated Ohm's Law Calculator</title>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js"></script>
+  <style>
+    /* Global Styles */
+    body {
+      font-family: 'Arial', sans-serif;
+      margin: 0;
+      padding: 0;
+      text-align: center;
+      background: linear-gradient(135deg, #1e3c72, #2a5298);
+      color: #fff;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.3s, color 0.3s;
+    }
+    .container {
+      width: 90%;
+      max-width: 600px;
+      padding: 30px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    }
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 20px;
+    }
+    label, input, select, button {
+      width: 100%;
+      margin: 10px 0;
+      padding: 10px;
+    }
+    button {
+      background-color: #4caf50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .result {
+      margin-top: 20px;
+      font-size: 1.2rem;
+      color: #f9f9f9;
+    }
+    table {
+      margin-top: 20px;
+      width: 100%;
+      border-collapse: collapse;
+    }
+    table, th, td {
+      border: 1px solid #fff;
+    }
+    th, td {
+      padding: 10px;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Cloud-Integrated Ohm's Law Calculator</h1>
+  <form id="ohmsLawForm">
+    <label for="calculationType">Choose Calculation Type</label>
+    <select id="calculationType" onchange="updateFields()">
+      <option value="voltage">Voltage (V)</option>
+      <option value="current">Current (I)</option>
+      <option value="resistance">Resistance (R)</option>
+      <option value="power">Power (P)</option>
+    </select>
+
+    <label for="input1">Input 1</label>
+    <input type="number" id="input1" placeholder="Enter value" required />
+
+    <label for="input2">Input 2</label>
+    <input type="number" id="input2" placeholder="Enter value" required />
+
+    <button type="button" onclick="calculate()">Calculate</button>
+  </form>
+
+  <div class="result" id="result"></div>
+  <h2>Calculation History</h2>
+  <table id="history">
+    <thead>
+      <tr>
+        <th>Calculation</th>
+        <th>Result</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script>
+  // Firebase configuration
+  const firebaseConfig = {
+    apiKey: "YOUR_FIREBASE_API_KEY",
+    authDomain: "YOUR_FIREBASE_AUTH_DOMAIN",
+    projectId: "YOUR_FIREBASE_PROJECT_ID",
+    storageBucket: "YOUR_FIREBASE_STORAGE_BUCKET",
+    messagingSenderId: "YOUR_FIREBASE_MESSAGING_SENDER_ID",
+    appId: "YOUR_FIREBASE_APP_ID"
+  };
+  const app = firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+
+  function updateFields() {
+    const type = document.getElementById('calculationType').value;
+    const input1Label = document.querySelector('label[for="input1"]');
+    const input2Label = document.querySelector('label[for="input2"]');
+
+    if (type === 'voltage') {
+      input1Label.textContent = "Current (I) in Amperes";
+      input2Label.textContent = "Resistance (R) in Ohms";
+    } else if (type === 'current') {
+      input1Label.textContent = "Voltage (V)";
+      input2Label.textContent = "Resistance (R)";
+    } else if (type === 'resistance') {
+      input1Label.textContent = "Voltage (V)";
+      input2Label.textContent = "Current (I)";
+    } else if (type === 'power') {
+      input1Label.textContent = "Voltage (V)";
+      input2Label.textContent = "Current (I)";
+    }
+  }
+
+  async function calculate() {
+    const type = document.getElementById('calculationType').value;
+    const input1 = parseFloat(document.getElementById('input1').value);
+    const input2 = parseFloat(document.getElementById('input2').value);
+    let result = '';
+
+    if (isNaN(input1) || isNaN(input2)) {
+      result = 'Please enter valid numbers for both inputs.';
+    } else {
+      if (type === 'voltage') {
+        result = `Voltage (V) = ${(input1 * input2).toFixed(2)} Volts`;
+      } else if (type === 'current') {
+        result = `Current (I) = ${(input1 / input2).toFixed(2)} Amperes`;
+      } else if (type === 'resistance') {
+        result = `Resistance (R) = ${(input1 / input2).toFixed(2)} Ohms`;
+      } else if (type === 'power') {
+        result = `Power (P) = ${(input1 * input2).toFixed(2)} Watts`;
+      }
+    }
+
+    document.getElementById('result').textContent = result;
+
+    // Save to Firebase
+    const docRef = await db.collection('calculations').add({
+      type,
+      input1,
+      input2,
+      result,
+      timestamp: new Date()
+    });
+
+    loadHistory();
+  }
+
+  async function loadHistory() {
+    const historyTable = document.getElementById('history').querySelector('tbody');
+    historyTable.innerHTML = '';
+    const querySnapshot = await db.collection('calculations').orderBy('timestamp', 'desc').get();
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      const row = `<tr>
+        <td>${data.type}</td>
+        <td>${data.result}</td>
+        <td><button onclick="deleteEntry('${doc.id}')">Delete</button></td>
+      </tr>`;
+      historyTable.innerHTML += row;
+    });
+  }
+
+  async function deleteEntry(id) {
+    await db.collection('calculations').doc(id).delete();
+    loadHistory();
+  }
+
+  loadHistory();
+</script>
+</body>
+</html>
